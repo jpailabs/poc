@@ -384,119 +384,42 @@ with col1:
             </div>
     """, unsafe_allow_html=True)
     
-    # Browse mode selection - NOW WITH SHAREPOINT!
+    # Browse mode selection - Browse Files or SharePoint
     browse_mode = st.radio(
         "Select browse method:",
-        options=["Direct Path", "File Explorer", "SharePoint Link"],
+        options=["Browse Files", "SharePoint Link"],
         horizontal=True,
         key="browse_mode_radio"
     )
     st.session_state.browse_mode = browse_mode
     
     # ========================================================================
-    # MODE 1: DIRECT PATH
+    # MODE 1: BROWSE FILES (SIMPLE FILE UPLOAD)
     # ========================================================================
     
-    if browse_mode == "Direct Path":
-        # Text input for direct folder path
-        direct_path = st.text_input(
-            "Enter folder path:",
-            value=st.session_state.direct_path,
-            placeholder="e.g., /Users/documents or C:\\Documents",
-            key="direct_path_input"
-        )
+    if browse_mode == "Browse Files":
+        st.markdown("**📂 Upload Internal Files**")
+        st.caption("Drag and drop files or click to browse")
         
-        if direct_path:
-            st.session_state.direct_path = direct_path
-            # Check if path exists
-            if os.path.exists(direct_path) and os.path.isdir(direct_path):
-                st.success(f"✓ Valid folder path")
-                
-                # List files in the path
-                _, files = get_directory_contents(direct_path)
-                
-                if files:
-                    st.markdown("**📄 Files found (PDF/DOCX):**")
-                    for file in files:
-                        file_path = os.path.join(direct_path, file)
-                        is_selected = file_path in st.session_state.selected_internal_files
-                        if st.checkbox(f"📄 {file}", value=is_selected, key=f"direct_file_{file}"):
-                            if file_path not in st.session_state.selected_internal_files:
-                                st.session_state.selected_internal_files.append(file_path)
-                        else:
-                            if file_path in st.session_state.selected_internal_files:
-                                st.session_state.selected_internal_files.remove(file_path)
-                else:
-                    st.info("No PDF or DOCX files in this folder")
-            elif direct_path:
-                st.error("⚠️ Invalid folder path. Please check and try again.")
-    
-    # ========================================================================
-    # MODE 2: FILE EXPLORER
-    # ========================================================================
-    
-    elif browse_mode == "File Explorer":
-        # Current path display
-        st.text_input(
-            "Current Path",
-            value=st.session_state.current_path,
-            key="path_display",
-            disabled=True,
+        # File uploader for internal files
+        uploaded_internal_files = st.file_uploader(
+            "Select internal files:",
+            accept_multiple_files=True,
+            type=['pdf', 'docx'],
+            key="internal_file_upload",
             label_visibility="collapsed"
         )
         
-        # Navigation buttons - small inline buttons side by side
-        btn_col1, btn_col2 = st.columns([1, 4])
-        with btn_col1:
-            col_a, col_b = st.columns(2)
-            with col_a:
-                go_up = st.button("⬆️", key="go_up", help="Go up one folder")
-            with col_b:
-                go_home = st.button("🏠", key="go_home", help="Go to home folder")
-        
-        if go_up:
-            parent = str(Path(st.session_state.current_path).parent)
-            st.session_state.current_path = parent
-            st.rerun()
-        if go_home:
-            st.session_state.current_path = str(Path.home())
-            st.rerun()
-        
-        # Get directory contents
-        folders, files = get_directory_contents(st.session_state.current_path)
-        
-        # Display folders
-        if folders:
-            st.markdown("**📁 Folders:**")
-            folder_options = ["-- Select a folder to open --"] + folders
-            selected_folder = st.selectbox(
-                "Select folder",
-                options=folder_options,
-                key="folder_select",
-                label_visibility="collapsed"
-            )
-            if selected_folder != "-- Select a folder to open --":
-                new_path = os.path.join(st.session_state.current_path, selected_folder)
-                st.session_state.current_path = new_path
-                st.rerun()
-        
-        # Display files with checkboxes for selection
-        if files:
-            st.markdown("**📄 Files (PDF/DOCX):**")
-            for file in files:
-                file_path = os.path.join(st.session_state.current_path, file)
-                is_selected = file_path in st.session_state.selected_internal_files
-                if st.checkbox(f"📄 {file}", value=is_selected, key=f"explorer_file_{file}"):
-                    if file_path not in st.session_state.selected_internal_files:
-                        st.session_state.selected_internal_files.append(file_path)
-                else:
-                    if file_path in st.session_state.selected_internal_files:
-                        st.session_state.selected_internal_files.remove(file_path)
-        else:
-            st.info("No PDF or DOCX files in this folder")
+        if uploaded_internal_files:
+            # Store uploaded files in session state
+            st.session_state.selected_internal_files = uploaded_internal_files
+            st.success(f"✅ {len(uploaded_internal_files)} file(s) uploaded")
+            for file in uploaded_internal_files:
+                file_size_kb = file.size / 1024
+                st.caption(f"📄 {file.name} ({file_size_kb:.1f} KB)")
     
     # ========================================================================
-    # MODE 3: SHAREPOINT LINK (NEW!)
+    # MODE 2: SHAREPOINT LINK
     # ========================================================================
     
     elif browse_mode == "SharePoint Link":
@@ -549,11 +472,11 @@ with col1:
             st.markdown("---")
             st.markdown("**Step 2: Upload the Downloaded File**")
         
-        # File uploader for SharePoint-downloaded files
+        # File uploader for SharePoint-downloaded files (PDF and DOCX only)
         sp_uploaded = st.file_uploader(
             "Upload SharePoint file(s):",
             accept_multiple_files=True,
-            type=['pdf', 'docx', 'doc', 'txt'],
+            type=['pdf', 'docx'],
             key="sp_file_upload",
             label_visibility="collapsed"
         )
@@ -732,7 +655,7 @@ if run_button:
 st.markdown("---")
 st.markdown(
     "<p style='text-align: center; color: #888888; font-size: 0.8rem;'>"
-    "Document Comparison Tool | OCBC © 2026 | Enhanced with SharePoint Support"
+    "Document Comparison Tool | OCBC © 2026 "
     "</p>",
     unsafe_allow_html=True
 )
