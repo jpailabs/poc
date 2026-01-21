@@ -417,6 +417,11 @@ with col1:
             for file in uploaded_internal_files:
                 file_size_kb = file.size / 1024
                 st.caption(f"📄 {file.name} ({file_size_kb:.1f} KB)")
+            
+            # Clear button for Browse Files mode
+            if st.button("🗑️ Clear", key="clear_browse_files"):
+                st.session_state.selected_internal_files = []
+                st.rerun()
     
     # ========================================================================
     # MODE 2: SHAREPOINT LINK
@@ -491,6 +496,12 @@ with col1:
             
             # Store in session state
             st.session_state.sp_uploaded_files = sp_uploaded
+            
+            # Clear button for SharePoint mode
+            if st.button("🗑️ Clear", key="clear_sharepoint_files"):
+                st.session_state.sp_uploaded_files = []
+                st.session_state.sp_link = ""
+                st.rerun()
     
     # ========================================================================
     # SHOW SELECTED FILES (ALL MODES)
