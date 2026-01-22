@@ -9,6 +9,8 @@ New Features:
 
 import streamlit as st
 import os
+import requests
+import time
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
@@ -26,6 +28,16 @@ ALLOWED_SHAREPOINT_PREFIXES = [
     # Add more allowed prefixes below as needed:
     # "https://another-allowed-domain.com",
 ]
+
+# ============================================================================
+# CONFIGURATION - API ENDPOINT
+# ============================================================================
+# Set the API URL via environment variable or use default
+# For deployment: export API_BASE_URL="https://your-api-server.com"
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+API_SUBMIT_JOB = f"{API_BASE_URL}/submit_job"
+API_CHECK_STATUS = f"{API_BASE_URL}/check_status"
+API_DOWNLOAD_RESULTS = f"{API_BASE_URL}/download_results"
 
 # Page configuration
 st.set_page_config(
@@ -112,11 +124,11 @@ st.markdown("""
     
     /* Container for header content */
     .header-content {
-        max-width: 1400px;
         width: 100%;
-        margin: 0 auto;
         display: flex;
         align-items: center;
+        justify-content: flex-start;
+        padding-left: 1rem;
     }
     
     .logo-text {
@@ -389,10 +401,10 @@ def validate_sharepoint_url(url):
 
 def parse_multiple_urls(url_string):
     """
-    Parse a comma-separated string of URLs into a list.
+    Parse a semicolon-separated string of URLs into a list.
     
     Args:
-        url_string (str): Comma-separated URLs
+        url_string (str): Semicolon-separated URLs
         
     Returns:
         list: List of trimmed, non-empty URLs
@@ -400,7 +412,7 @@ def parse_multiple_urls(url_string):
     if not url_string:
         return []
     
-    urls = [url.strip() for url in url_string.split(',')]
+    urls = [url.strip() for url in url_string.split(';')]
     return [url for url in urls if url]  # Filter out empty strings
 
 
@@ -422,6 +434,14 @@ if 'sp_uploaded_files' not in st.session_state:
     st.session_state.sp_uploaded_files = []
 if 'sp_link' not in st.session_state:
     st.session_state.sp_link = ""
+if 'sp_input_key_counter' not in st.session_state:
+    st.session_state.sp_input_key_counter = 0
+if 'job_id' not in st.session_state:
+    st.session_state.job_id = None
+if 'job_status' not in st.session_state:
+    st.session_state.job_status = None
+if 'job_info' not in st.session_state:
+    st.session_state.job_info = None
 
 
 # ============================================================================
@@ -489,26 +509,38 @@ with col1:
         st.markdown("""
         <div class="sp-info-box">
             <strong>📎 SharePoint Document Access</strong><br/>
-            <small>Since the server cannot access SharePoint directly, you'll download files using your browser:</small>
+            <small>Provide SharePoint URLs for your internal HR policy documents:</small>
             <ol style="margin: 0.5rem 0 0 0; padding-left: 1.5rem;">
-                <li>Paste SharePoint link(s) below (separate multiple URLs with commas)</li>
-                <li>Click to download each file (uses your browser's network)</li>
-                <li>Upload the downloaded file(s)</li>
+                <li>Paste one or more SharePoint document URLs below</li>
+                <li>Separate multiple URLs with semicolons (;)</li>
+                <li>Only authorized SharePoint domains are accepted</li>
             </ol>
+            <small style="color: #666; margin-top: 0.5rem; display: block;">
+                <em>The URLs will be sent to the comparison API for processing.</em>
+            </small>
         </div>
         """, unsafe_allow_html=True)
         
         # SharePoint link input - now accepts multiple URLs
+        # Using dynamic key to allow proper clearing of the input
         sp_links_input = st.text_area(
             "📎 Paste SharePoint Document Link(s):",
             value=st.session_state.sp_link,
-            placeholder="https://intranet-16.com/sites/docs/file1.pdf, https://intranet-16.com/sites/docs/file2.pdf",
-            key="sp_link_input",
-            help="Paste one or more SharePoint URLs separated by commas (,). Only authorized SharePoint domains are allowed.",
+            placeholder="https://intranet-16.com/sites/docs/file1.pdf; https://intranet-16.com/sites/docs/file2.pdf",
+            key=f"sp_link_input_{st.session_state.sp_input_key_counter}",
+            help="Paste one or more SharePoint URLs separated by semicolons (;). Only authorized SharePoint domains are allowed.",
             height=100
         )
         
-        if sp_links_input:
+        # Clear button for URL input - allows user to clear and paste new URLs
+        if st.button("🗑️ Clear URLs", key="clear_sp_urls", help="Clear the URL input to paste new URLs"):
+            st.session_state.sp_link = ""
+            st.session_state.sp_uploaded_files = []
+            st.session_state.sp_input_key_counter += 1  # Increment to create new widget
+            st.rerun()
+        
+        # Only process URLs if there's input
+        if sp_links_input and sp_links_input.strip():
             st.session_state.sp_link = sp_links_input
             
             # Parse multiple URLs
@@ -563,34 +595,9 @@ with col1:
                         )
                     
                     st.caption("Click each download button to save files to your computer.")
-                    st.markdown("---")
-                    st.markdown("**Step 2: Upload the Downloaded File(s)**")
         
-        # File uploader for SharePoint-downloaded files (PDF and DOCX only)
-        sp_uploaded = st.file_uploader(
-            "Upload SharePoint file(s):",
-            accept_multiple_files=True,
-            type=['pdf', 'docx'],
-            key="sp_file_upload",
-            label_visibility="collapsed"
-        )
-        
-        if sp_uploaded:
-            st.success(f"✅ {len(sp_uploaded)} SharePoint file(s) uploaded and ready")
-            
-            # Display uploaded files
-            for file in sp_uploaded:
-                file_size_kb = file.size / 1024
-                st.caption(f"📄 {file.name} ({file_size_kb:.1f} KB)")
-            
-            # Store in session state
-            st.session_state.sp_uploaded_files = sp_uploaded
-            
-            # Clear button for SharePoint mode
-            if st.button("🗑️ Clear", key="clear_sharepoint_files"):
-                st.session_state.sp_uploaded_files = []
-                st.session_state.sp_link = ""
-                st.rerun()
+        # Note: In SharePoint mode, no file upload is needed here.
+        # The URLs themselves are passed to the API for processing.
     
     # ========================================================================
     # SHOW SELECTED FILES (ALL MODES)
@@ -675,77 +682,195 @@ with col_center:
 if run_button:
     st.markdown("---")
     
-    # Validation - check for internal files (local or SharePoint)
-    has_local_files = len(st.session_state.selected_internal_files) > 0
-    has_sp_files = len(st.session_state.sp_uploaded_files) > 0
-    has_internal = has_local_files or has_sp_files
+    # Get current browse mode
+    current_mode = st.session_state.browse_mode
     
+    # Validation based on mode
     has_external = st.session_state.external_files and len(st.session_state.external_files) > 0
     
-    if not has_internal:
-        st.error("⚠️ Please browse and select internal files to compare.")
-    elif not has_external:
+    # Determine home_url based on mode
+    home_url = ""
+    if current_mode == "Browse Files":
+        has_internal = len(st.session_state.selected_internal_files) > 0
+        if not has_internal:
+            st.error("⚠️ Please upload internal files to compare.")
+            st.stop()
+        internal_filenames = [f.name for f in st.session_state.selected_internal_files]
+        home_url = ";".join(internal_filenames)
+    elif current_mode == "SharePoint Link":
+        has_sp_urls = st.session_state.sp_link and st.session_state.sp_link.strip()
+        if not has_sp_urls:
+            st.error("⚠️ Please provide SharePoint URLs in the input box.")
+            st.stop()
+        home_url = st.session_state.sp_link.strip()
+    
+    if not has_external:
         st.error("⚠️ Please upload external documents to compare.")
-    else:
-        # Show comparison progress
-        st.markdown("### 📊 Comparison Results")
+        st.stop()
+    
+    # Submit Job
+    st.markdown("### 📤 Submitting Comparison Job")
+    
+    with st.spinner("Submitting documents to comparison API..."):
+        try:
+            # Prepare files for upload
+            files = []
+            for file in st.session_state.external_files:
+                file.seek(0)
+                files.append(
+                    ('policy_file', (file.name, file.read(), file.type))
+                )
+            
+            # Prepare form data
+            data = {
+                'home_url': home_url,
+                'max_level': '-1'
+            }
+            
+            # Make POST request to submit_job
+            response = requests.post(
+                API_SUBMIT_JOB,
+                data=data,
+                files=files,
+                timeout=120
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                job_id = result.get('job_id')
+                
+                if job_id:
+                    st.session_state.job_id = job_id
+                    st.session_state.job_status = "SUBMITTED"
+                    st.success(f"✅ Job submitted successfully!")
+                    st.info(f"**Job ID:** `{job_id}`")
+                else:
+                    st.error("❌ No job_id returned from API")
+            else:
+                error_detail = "Unknown error"
+                try:
+                    error_data = response.json()
+                    error_detail = error_data.get('detail', str(error_data))
+                except:
+                    error_detail = response.text
+                st.error(f"❌ API Error ({response.status_code}): {error_detail}")
+                
+        except requests.exceptions.ConnectionError:
+            st.error("❌ **Connection Error**: Could not connect to the API. Please ensure the backend server is running.")
+        except requests.exceptions.Timeout:
+            st.error("❌ **Timeout Error**: The API request timed out. Please try again.")
+        except Exception as e:
+            st.error(f"❌ **Error**: {str(e)}")
+
+
+# ============================================================================
+# JOB STATUS SECTION
+# ============================================================================
+
+if st.session_state.job_id:
+    st.markdown("---")
+    st.markdown("### 📊 Job Status")
+    
+    # Display current job info
+    st.info(f"**Job ID:** `{st.session_state.job_id}`")
+    
+    # Check Status button
+    col_status, col_download = st.columns(2)
+    
+    with col_status:
+        if st.button("🔄 Check Status", use_container_width=True):
+            try:
+                response = requests.get(
+                    f"{API_CHECK_STATUS}/{st.session_state.job_id}",
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    status_data = response.json()
+                    st.session_state.job_status = status_data.get('status', 'UNKNOWN')
+                    st.session_state.job_info = status_data.get('info', {})
+                else:
+                    st.error(f"❌ Failed to get status: {response.status_code}")
+                    
+            except Exception as e:
+                st.error(f"❌ Error checking status: {str(e)}")
+    
+    with col_download:
+        if st.session_state.job_status == "COMPLETED":
+            if st.button("📥 Download Results", use_container_width=True):
+                try:
+                    response = requests.get(
+                        f"{API_DOWNLOAD_RESULTS}/{st.session_state.job_id}",
+                        timeout=60
+                    )
+                    
+                    if response.status_code == 200:
+                        # Check if it's a file download or JSON with link
+                        content_type = response.headers.get('content-type', '')
+                        
+                        if 'application/json' in content_type:
+                            result = response.json()
+                            download_url = result.get('download_url') or result.get('url')
+                            if download_url:
+                                st.success(f"📎 Download ready!")
+                                st.markdown(f"[📥 Click here to download]({download_url})")
+                            else:
+                                st.json(result)
+                        else:
+                            # Direct file download
+                            st.download_button(
+                                label="💾 Save Results",
+                                data=response.content,
+                                file_name=f"comparison_results_{st.session_state.job_id[:8]}.zip",
+                                mime="application/octet-stream"
+                            )
+                    else:
+                        st.error(f"❌ Download failed: {response.status_code}")
+                        
+                except Exception as e:
+                    st.error(f"❌ Error downloading: {str(e)}")
+    
+    # Display status info
+    if st.session_state.job_status:
+        status = st.session_state.job_status
         
-        with st.spinner("Comparing documents..."):
-            import time
-            time.sleep(1)  # Simulate processing
+        # Status badge
+        if status == "COMPLETED":
+            st.success(f"✅ Status: **{status}**")
+        elif status == "PROGRESS" or status == "PROCESSING":
+            st.warning(f"⏳ Status: **{status}**")
+        elif status == "FAILED":
+            st.error(f"❌ Status: **{status}**")
+        else:
+            st.info(f"� Status: **{status}**")
+        
+        # Progress info
+        if st.session_state.job_info:
+            info = st.session_state.job_info
             
-            # Display summary
-            st.success("✅ Document comparison completed!")
-            
-            # Results container
-            result_col1, result_col2 = st.columns(2)
-            
-            with result_col1:
-                st.markdown("**Internal Files:**")
+            with st.expander("📋 Processing Details", expanded=True):
+                info_col1, info_col2 = st.columns(2)
                 
-                # Show local files
-                for f in st.session_state.selected_internal_files:
-                    if hasattr(f, 'name'):  # Uploaded file object
-                        st.write(f"• {f.name}")
-                    else:  # File path string
-                        st.write(f"• {os.path.basename(f)}")
+                with info_col1:
+                    st.metric("Total Files", info.get('total_file', 'N/A'))
+                    st.metric("Total Processed", info.get('total_processed', 'N/A'))
                 
-                # Show SharePoint files
-                if has_sp_files:
-                    for file in st.session_state.sp_uploaded_files:
-                        st.write(f"• {file.name} 🔗")  # 🔗 indicates from SharePoint
-            
-            with result_col2:
-                st.markdown("**External Documents:**")
-                if st.session_state.external_files:
-                    for file in st.session_state.external_files:
-                        st.write(f"• {file.name}")
-            
-            # Placeholder for actual comparison results
-            st.markdown("---")
-            st.markdown("### 📋 Comparison Summary")
-            st.info("""
-            **Note:** This is a placeholder for the comparison logic. 
-            
-            To implement the actual comparison, you can:
-            1. Parse the uploaded files based on their type
-            2. Extract text/data from documents
-            3. Compare content using similarity algorithms
-            4. Generate a detailed comparison report
-            
-            **SharePoint files are available in:** `st.session_state.sp_uploaded_files`
-            They can be processed the same way as external uploaded files.
-            """)
-            
-            # Sample metrics (placeholder)
-            metric_col1, metric_col2, metric_col3 = st.columns(3)
-            with metric_col1:
-                total_internal = len(st.session_state.selected_internal_files) + len(st.session_state.sp_uploaded_files)
-                st.metric("Internal Files", f"{total_internal}")
-            with metric_col2:
-                st.metric("External Files", f"{len(st.session_state.external_files or [])}")
-            with metric_col3:
-                st.metric("Match Score", "Pending")
+                with info_col2:
+                    st.metric("Total PDFs", info.get('total_pdf', 'N/A'))
+                    st.metric("Failed", info.get('total_failed', 'N/A'))
+                
+                if info.get('processing_pdf'):
+                    st.caption(f"🔄 Currently processing: `{info.get('processing_pdf')}`")
+                
+                if info.get('status'):
+                    st.caption(f"📌 Step: `{info.get('status')}`")
+    
+    # Clear job button
+    if st.button("🗑️ Clear Job", key="clear_job"):
+        st.session_state.job_id = None
+        st.session_state.job_status = None
+        st.session_state.job_info = None
+        st.rerun()
 
 
 # ============================================================================
