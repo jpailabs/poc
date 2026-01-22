@@ -12,6 +12,21 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
+# ============================================================================
+# CONFIGURATION - ALLOWED SHAREPOINT PREFIXES
+# ============================================================================
+# Add or remove SharePoint URL prefixes that are allowed for document comparison.
+# Users can only paste URLs that start with one of these prefixes.
+# To add a new allowed prefix, simply add it to this list.
+
+ALLOWED_SHAREPOINT_PREFIXES = [
+    "https://intranet-16.com",
+    "https://oc.sharepoint.com",
+    "https://jjt.sharepoint.com",
+    # Add more allowed prefixes below as needed:
+    # "https://another-allowed-domain.com",
+]
+
 # Page configuration
 st.set_page_config(
     page_title="OCBC Document Comparison",
@@ -346,6 +361,49 @@ def extract_filename_from_url(url):
         return "document"
 
 
+def validate_sharepoint_url(url):
+    """
+    Validate if a SharePoint URL starts with an allowed prefix.
+    
+    Args:
+        url (str): The SharePoint URL to validate
+        
+    Returns:
+        tuple: (is_valid: bool, error_message: str or None)
+    """
+    if not url:
+        return False, "URL cannot be empty"
+    
+    url = url.strip()
+    
+    # Check if URL starts with any allowed prefix
+    for prefix in ALLOWED_SHAREPOINT_PREFIXES:
+        if url.lower().startswith(prefix.lower()):
+            return True, None
+    
+    # URL doesn't match any allowed prefix
+    allowed_prefixes_display = ", ".join([f"`{p}`" for p in ALLOWED_SHAREPOINT_PREFIXES])
+    error_msg = f"Access denied. The SharePoint URL must start with one of the following authorized domains: {allowed_prefixes_display}"
+    return False, error_msg
+
+
+def parse_multiple_urls(url_string):
+    """
+    Parse a comma-separated string of URLs into a list.
+    
+    Args:
+        url_string (str): Comma-separated URLs
+        
+    Returns:
+        list: List of trimmed, non-empty URLs
+    """
+    if not url_string:
+        return []
+    
+    urls = [url.strip() for url in url_string.split(',')]
+    return [url for url in urls if url]  # Filter out empty strings
+
+
 # ============================================================================
 # SESSION STATE INITIALIZATION
 # ============================================================================
@@ -433,49 +491,80 @@ with col1:
             <strong>📎 SharePoint Document Access</strong><br/>
             <small>Since the server cannot access SharePoint directly, you'll download files using your browser:</small>
             <ol style="margin: 0.5rem 0 0 0; padding-left: 1.5rem;">
-                <li>Paste SharePoint link below</li>
-                <li>Click to download (uses your browser's network)</li>
-                <li>Upload the downloaded file</li>
+                <li>Paste SharePoint link(s) below (separate multiple URLs with commas)</li>
+                <li>Click to download each file (uses your browser's network)</li>
+                <li>Upload the downloaded file(s)</li>
             </ol>
         </div>
         """, unsafe_allow_html=True)
         
-        # SharePoint link input
-        sp_link = st.text_input(
-            "📎 Paste SharePoint Document Link:",
+        # SharePoint link input - now accepts multiple URLs
+        sp_links_input = st.text_area(
+            "📎 Paste SharePoint Document Link(s):",
             value=st.session_state.sp_link,
-            placeholder="https://yourcompany.sharepoint.com/sites/site/Documents/file.pdf",
+            placeholder="https://intranet-16.com/sites/docs/file1.pdf, https://intranet-16.com/sites/docs/file2.pdf",
             key="sp_link_input",
-            help="Paste the full URL of your SharePoint document"
+            help="Paste one or more SharePoint URLs separated by commas (,). Only authorized SharePoint domains are allowed.",
+            height=100
         )
         
-        if sp_link:
-            st.session_state.sp_link = sp_link
+        if sp_links_input:
+            st.session_state.sp_link = sp_links_input
             
-            # Convert to download link
-            download_link = convert_sharepoint_to_download_link(sp_link)
+            # Parse multiple URLs
+            urls = parse_multiple_urls(sp_links_input)
             
-            # Extract filename from URL for display
-            filename = extract_filename_from_url(sp_link)
-            
-            st.success(f"✅ Link processed: `{filename}`")
-            
-            # Step 1: Download button
-            st.markdown("**Step 1: Download from SharePoint**")
-            st.markdown(
-                f"""
-                <a href="{download_link}" target="_blank" rel="noopener noreferrer" class="sp-download-btn">
-                    📥 Open SharePoint & Download File
-                </a>
-                <p style="font-size: 0.85rem; color: #6c757d; margin-top: 0.5rem;">
-                    This will open SharePoint in a new tab. Download the file to your computer.
-                </p>
-                """,
-                unsafe_allow_html=True
-            )
-            
-            st.markdown("---")
-            st.markdown("**Step 2: Upload the Downloaded File**")
+            if urls:
+                # Validate all URLs first
+                valid_urls = []
+                invalid_urls = []
+                
+                for url in urls:
+                    is_valid, error_msg = validate_sharepoint_url(url)
+                    if is_valid:
+                        valid_urls.append(url)
+                    else:
+                        invalid_urls.append((url, error_msg))
+                
+                # Display validation errors
+                if invalid_urls:
+                    st.markdown("---")
+                    st.error("⚠️ **Access Restricted: Unauthorized SharePoint Domain(s) Detected**")
+                    for url, error in invalid_urls:
+                        truncated_url = url[:60] + "..." if len(url) > 60 else url
+                        st.warning(f"🚫 `{truncated_url}`\n\n{error}")
+                    
+                    # Show allowed prefixes for reference
+                    st.info(f"**ℹ️ Authorized SharePoint Domains:**\n" + "\n".join([f"• `{p}`" for p in ALLOWED_SHAREPOINT_PREFIXES]))
+                
+                # Process valid URLs
+                if valid_urls:
+                    st.success(f"✅ {len(valid_urls)} valid link(s) processed")
+                    
+                    # Step 1: Show download buttons for each valid URL
+                    st.markdown("**Step 1: Download from SharePoint**")
+                    
+                    for i, url in enumerate(valid_urls, 1):
+                        download_link = convert_sharepoint_to_download_link(url)
+                        filename = extract_filename_from_url(url)
+                        
+                        st.markdown(
+                            f"""
+                            <div style="margin-bottom: 0.5rem;">
+                                <span style="font-size: 0.9rem; color: #555;">📄 {i}. {filename}</span>
+                                <a href="{download_link}" target="_blank" rel="noopener noreferrer" 
+                                   style="margin-left: 0.5rem; padding: 0.3rem 0.6rem; background-color: var(--primary-color); 
+                                          color: white; border-radius: 4px; text-decoration: none; font-size: 0.8rem;">
+                                    📥 Download
+                                </a>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                    
+                    st.caption("Click each download button to save files to your computer.")
+                    st.markdown("---")
+                    st.markdown("**Step 2: Upload the Downloaded File(s)**")
         
         # File uploader for SharePoint-downloaded files (PDF and DOCX only)
         sp_uploaded = st.file_uploader(
