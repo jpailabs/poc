@@ -1,0 +1,19 @@
+  cd /home/cdsw/poc
+
+  tar --exclude='sowa/venv' \
+      --exclude='sowa/**/__pycache__' \
+      --exclude='sowa/**/*.pyc' \
+      --exclude='sowa/sow.db' \
+      --exclude='sowa/sow_sessions' \
+      --exclude='sowa/backend/audit_log.jsonl' \
+      -czf sowa_backup_$(date +%Y%m%d_%H%M%S).tar.gz \
+      sowa/
+
+  ls -lh sowa_backup_*.tar.gz
+
+  This creates a file like sowa_backup_20260406_123456.tar.gz in /home/cdsw/poc/.
+
+  ---
+  To restore later:
+  cd /home/cdsw/poc
+  tar -xzf sowa_backup_20260406_123456.tar.gz
