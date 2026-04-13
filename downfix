@@ -1,0 +1,42 @@
+  ---
+  Option A — Quick fix on CML right now (no new ZIP needed)
+
+  Open CML Files browser, navigate to your deployed export.py:
+  /home/cdsw/poc/sowa1/backend/routers/export.py
+
+  Find this block (around line 774):
+      # Use inline sow_text if provided (mock mode bypass — no session lookup needed)
+      if body.sow_text:
+          sow_text = body.sow_text
+      else:
+          state = session_states.get(body.session_id)
+          if state is None:
+              raise HTTPException(404, ...
+          if state.get("generation_id") != body.generation_id:
+              raise HTTPException(400, ...
+          sow_text = state.get("generation_result")
+          if not sow_text:
+              raise HTTPException(400, "No generated SOW text found...")
+
+  Replace the entire block with:
+      sow_text = body.sow_text if body.sow_text else None
+
+      if not sow_text:
+          state = session_states.get(body.session_id)
+          if state:
+              sow_text = state.get("generation_result") or None
+
+      if not sow_text:
+          try:
+              from pathlib import Path as _Path
+              render_dir = _Path(__file__).resolve().parent.parent.parent / "render"
+              md_files = sorted(render_dir.glob("*_final_writeup.md"))
+              if md_files:
+                  sow_text = md_files[0].read_text(encoding="utf-8")
+          except Exception:
+              pass
+
+      if not sow_text:
+          raise HTTPException(400, "No SOW content found. Please generate the report first.")
+
+  Save. No restart needed — uvicorn auto-reloads on file change.
