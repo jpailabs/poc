@@ -1,0 +1,51 @@
+security find-generic-password -s "Claude Code-credentials" -w
+
+claude setup-token
+
+
+(base) jayaprakash@macbookpro sowa % security find-generic-password -s "Claude Code-credentials" -w
+
+
+{"claudeAiOauth":{"accessToken":"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","refreshToken":"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","expiresAt":1778756565182,"scopes":["user:file_upload","user:inference","user:mcp_servers","user:profile","user:sessions:claude_code"],"subscriptionType":"pro","rateLimitTier":"default_claude_ai"}}
+
+
+
+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
+
+
+
+
+
+(base) jayaprakash@macbookpro sowa % 
+(base) jayaprakash@macbookpro sowa % claude setup-token
+Welcome to Claude Code v2.1.79
+…………………………………………………………………………………………………………………………………………………………
+
+
+
+            ░░░░░░
+    ░░░   ░░░░░░░░░░
+   ░░░░░░░░░░░░░░░░░░░
+
+                           ░░░░                     ██
+                         ░░░░░░░░░░               ██▒▒██
+                                            ▒▒      ██   ▒
+                                          ▒▒░░▒▒      ▒ ▒▒
+      ▗ ▗     ▖ ▖                           ▒▒         ▒▒
+                                           ░          ▒
+…………………         ……………………………………………………………………░…………………………▒…………
+
+                                                              
+✓ Long-lived authentication token created successfully!
+                                                                                                                                                                                                                     
+Your OAuth token (valid for 1 year):                                                                                            
+
+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
+                              
+Store this token securely. You won't be able to see it again.
+
+Use this token by setting: export CLAUDE_CODE_OAUTH_TOKEN=<token>
+
+(base) jayaprakash@macbookpro sowa % 
+
+
