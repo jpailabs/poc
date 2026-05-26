@@ -2,18 +2,6 @@ jbj
 
 
 
-security find-generic-password -s "Claude Code-credentials" -w
 
-claude setup-token
-
-
-ecurity find-generic-password -s "Claude Code-credentials" -w
-
-
-{"claudeAiOauth":{"accessToken":"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","refreshToken":"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","expiresAt":1779066904970,"scopes":["user:file_upload","user:inference","user:mcp_servers","user:profile","user:sessions:claude_code"],"subscriptionType":"pro","rateLimitTier":"default_claude_ai"}}
-
-                                                            
-
-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
                               
 
